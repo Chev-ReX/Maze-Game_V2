@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze Runner</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #2c3e50;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        .game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+        }
+        
+        #game-canvas {
+            background-color: #34495e;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 18px;
+            pointer-events: none;
+        }
+        
+        .level-info {
+            margin-bottom: 10px;
+        }
+        
+        .powerups-info {
+            margin-bottom: 10px;
+        }
+        
+        .modal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(44, 62, 80, 0.9);
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            display: none;
+        }
+        
+        .modal h2 {
+            margin-top: 0;
+            color: #2ecc71;
+        }
+        
+        .modal p {
+            margin-bottom: 20px;
+        }
+        
+        .modal button {
+            background-color: #2ecc71;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        .modal button:hover {
+            background-color: #27ae60;
+        }
+        
+        .controls-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: white;
+            font-size: 16px;
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        
+        .start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(44, 62, 80, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 200;
+        }
+        
+        .start-screen h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #2ecc71;
+            text-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+        }
+        
+        .start-screen p {
+            margin-bottom: 30px;
+            font-size: 18px;
+            max-width: 600px;
+            text-align: center;
+            line-height: 1.5;
+        }
+        
+        .start-screen button {
+            background-color: #2ecc71;
+            border: none;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 20px;
+            transition: all 0.3s;
+        }
+        
+        .start-screen button:hover {
+            background-color: #27ae60;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="game-canvas" width="800" height="600"></canvas>
+        
+        <div class="ui-overlay">
+            <div class="level-info">Level: <span id="level-display">1</span></div>
+            <div class="powerups-info">Power-ups: <span id="powerups-display">None</span></div>
+        </div>
+        
+        <div class="controls-info">
+            Controls: W (Up), A (Left), S (Down), D (Right)
+        </div>
+        
+        <div id="level-complete" class="modal">
+            <h2>Level Complete!</h2>
+            <p>You've found the exit! Get ready for the next challenge.</p>
+            <button id="next-level-btn">Next Level</button>
+        </div>
+        
+        <div id="game-over" class="modal">
+            <h2>Game Over</h2>
+            <p>You've been caught! Try again?</p>
+            <button id="restart-btn">Restart Game</button>
+        </div>
+        
+        <div class="start-screen" id="start-screen">
+            <h1>Maze Runner</h1>
+            <p>Navigate through increasingly difficult mazes using W, A, S, D controls. Collect power-ups to help you escape, but watch out for traps and enemies! Can you conquer all levels?</p>
+            <button id="start-game-btn">Start Game</button>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const CELL_SIZE = 40;
+        const PLAYER_SIZE = 20;
+        const POWERUP_SIZE = 15;
+        const ENEMY_SIZE = 22;
+        const PLAYER_SPEED = 5;
+        const ENEMY_BASE_SPEED = 2;
+        
+        // Game state
+        let canvas, ctx;
+        let player = { x: 0, y: 0, speed: PLAYER_SPEED, hasSpeedBoost: false, isInvincible: false };
+        let maze = [];
+        let exit = { x: 0, y: 0 };
+        let powerUps = [];
+        let enemies = [];
+        let currentLevel = 1;
+        let maxLevel = 5;
+        let keys = { w: false, a: false, s: false, d: false };
+        let gameRunning = false;
+        let activePowerups = [];
+        
+        // Modal elements
+        const levelCompleteModal = document.getElementById('level-complete');
+        const gameOverModal = document.getElementById('game-over');
+        const startScreen = document.getElementById('start-screen');
+        const nextLevelBtn = document.getElementById('next-level-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const startGameBtn = document.getElementById('start-game-btn');
+        const levelDisplay = document.getElementById('level-display');
+        const powerupsDisplay = document.getElementById('powerups-display');
+        
+        // Initialize the game
+        function init() {
+            canvas = document.getElementById('game-canvas');
+            ctx = canvas.getContext('2d');
+            
+            // Event listeners
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+            nextLevelBtn.addEventListener('click', startNextLevel);
+            restartBtn.addEventListener('click', restartGame);
+            startGameBtn.addEventListener('click', startGame);
+            
+            // Show start screen
+            startScreen.style.display = 'flex';
+        }
+        
+        function startGame() {
+            startScreen.style.display = 'none';
+            currentLevel = 1;
+            initLevel(currentLevel);
+            gameRunning = true;
+            gameLoop();
+        }
+        
+        function initLevel(level) {
+            // Reset player state but keep powerups between levels
+            player.hasSpeedBoost = activePowerups.includes('speed');
+            player.isInvincible = activePowerups.includes('invincibility');
+            
+            // Generate maze based on level
+            generateMaze(level);
+            
+            // Place player at starting position (top-left)
+            player.x = CELL_SIZE * 1.5 - PLAYER_SIZE / 2;
+            player.y = CELL_SIZE * 1.5 - PLAYER_SIZE / 2;
+            
+            // Update UI
+            levelDisplay.textContent = level;
+            updatePowerupsDisplay();
+        }
+        
+        function generateMaze(level) {
+            // Clear existing maze and entities
+            maze = [];
+            powerUps = [];
+            enemies = [];
+            
+            // Define maze dimensions based on level
+            const width = 12 + Math.min(level * 2, 8); // Increase size with level, max 20
+            const height = 10 + Math.min(level * 1, 5); // Increase size with level, max 15
+            
+            // Create empty maze
+            for (let y = 0; y < height; y++) {
+                const row = [];
+                for (let x = 0; x < width; x++) {
+                    // Border walls are always solid
+                    if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
+                        row.push(1); // Wall
+                    } else {
+                        row.push(0); // Path
+                    }
+                }
+                maze.push(row);
+            }
+            
+            // Add internal walls based on level (more walls for higher levels)
+            const wallDensity = 0.25 + (level * 0.05);
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    // Leave the start position clear
+                    if (x === 1 && y === 1) continue;
+                    
+                    if (Math.random() < wallDensity) {
+                        maze[y][x] = 1; // Wall
+                    }
+                }
+            }
+            
+            // Make sure the maze is solvable by creating paths
+            // Simple algorithm for demonstration: create a zigzag path
+            let x = 1, y = 1;
+            while (x < width - 2 || y < height - 2) {
+                maze[y][x] = 0; // Ensure path
+                
+                if (x < width - 2 && (y === height - 2 || Math.random() < 0.7)) {
+                    x++;
+                } else if (y < height - 2) {
+                    y++;
+                }
+            }
+            
+            // Place exit at bottom-right
+            exit = {
+                x: (width - 2) * CELL_SIZE + CELL_SIZE / 2,
+                y: (height - 2) * CELL_SIZE + CELL_SIZE / 2
+            };
+            maze[height - 2][width - 2] = 0; // Ensure exit is accessible
+            
+            // Add power-ups (more on higher levels)
+            const powerUpCount = 1 + Math.floor(level / 2);
+            addPowerUps(powerUpCount, width, height);
+            
+            // Add enemies (more on higher levels)
+            const enemyCount = level;
+            addEnemies(enemyCount, width, height);
+        }
+        
+        function addPowerUps(count, width, height) {
+            const types = ['speed', 'invincibility'];
+            
+            for (let i = 0; i < count; i++) {
+                let x, y;
+                do {
+                    x = Math.floor(Math.random() * (width - 2)) + 1;
+                    y = Math.floor(Math.random() * (height - 2)) + 1;
+                } while (maze[y][x] !== 0 || (x === 1 && y === 1));
+                
+                const type = types[Math.floor(Math.random() * types.length)];
+                powerUps.push({
+                    x: x * CELL_SIZE + CELL_SIZE / 2,
+                    y: y * CELL_SIZE + CELL_SIZE / 2,
+                    type: type,
+                    collected: false
+                });
+            }
+        }
+        
+        function addEnemies(count, width, height) {
+            for (let i = 0; i < count; i++) {
+                let x, y;
+                do {
+                    x = Math.floor(Math.random() * (width - 2)) + 1;
+                    y = Math.floor(Math.random() * (height - 2)) + 1;
+                } while (maze[y][x] !== 0 || (x === 1 && y === 1) || (x === width - 2 && y === height - 2));
+                
+                enemies.push({
+                    x: x * CELL_SIZE + CELL_SIZE / 2,
+                    y: y * CELL_SIZE + CELL_SIZE / 2,
+                    speed: ENEMY_BASE_SPEED * (1 + currentLevel * 0.1), // Enemies get faster with level
+                    direction: { x: Math.random() < 0.5 ? -1 : 1, y: Math.random() < 0.5 ? -1 : 1 }
+                });
+            }
+        }
+        
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function update() {
+            // Update player position based on keyboard input
+            const speed = player.hasSpeedBoost ? player.speed * 1.5 : player.speed;
+            
+            let dx = 0, dy = 0;
+            if (keys.w) dy -= speed;
+            if (keys.a) dx -= speed;
+            if (keys.s) dy += speed;
+            if (keys.d) dx += speed;
+            
+            // Normalize diagonal movement
+            if (dx !== 0 && dy !== 0) {
+                const factor = 1 / Math.sqrt(2);
+                dx *= factor;
+                dy *= factor;
+            }
+            
+            // Check collision with maze walls before moving
+            const newX = player.x + dx;
+            const newY = player.y + dy;
+            
+            if (!checkWallCollision(newX, player.y)) {
+                player.x = newX;
+            }
+            
+            if (!checkWallCollision(player.x, newY)) {
+                player.y = newY;
+            }
+            
+            // Check if player reached exit
+            const distToExit = Math.hypot(player.x - exit.x, player.y - exit.y);
+            if (distToExit < CELL_SIZE / 2) {
+                levelComplete();
+                return;
+            }
+            
+            // Check for power-up collection
+            for (const powerUp of powerUps) {
+                if (!powerUp.collected) {
+                    const dist = Math.hypot(player.x - powerUp.x, player.y - powerUp.y);
+                    if (dist < (PLAYER_SIZE + POWERUP_SIZE) / 2) {
+                        collectPowerUp(powerUp);
+                    }
+                }
+            }
+            
+            // Update enemies
+            for (const enemy of enemies) {
+                // Move enemy
+                enemy.x += enemy.direction.x * enemy.speed;
+                enemy.y += enemy.direction.y * enemy.speed;
+                
+                // Check wall collision and bounce
+                if (checkWallCollision(enemy.x, enemy.y)) {
+                    // Find better direction
+                    if (checkWallCollision(enemy.x, enemy.y - enemy.speed) || 
+                        checkWallCollision(enemy.x, enemy.y + enemy.speed)) {
+                        enemy.direction.x *= -1;
+                    }
+                    if (checkWallCollision(enemy.x - enemy.speed, enemy.y) || 
+                        checkWallCollision(enemy.x + enemy.speed, enemy.y)) {
+                        enemy.direction.y *= -1;
+                    }
+                    
+                    // Back up from the wall
+                    enemy.x -= enemy.direction.x * enemy.speed;
+                    enemy.y -= enemy.direction.y * enemy.speed;
+                }
+                
+                // Check for collision with player if not invincible
+                if (!player.isInvincible) {
+                    const dist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+                    if (dist < (PLAYER_SIZE + ENEMY_SIZE) / 2) {
+                        gameOver();
+                        return;
+                    }
+                }
+            }
+        }
+        
+        function checkWallCollision(x, y) {
+            // Check each corner of the player sprite
+            const corners = [
+                { x: x - PLAYER_SIZE / 2, y: y - PLAYER_SIZE / 2 },
+                { x: x + PLAYER_SIZE / 2, y: y - PLAYER_SIZE / 2 },
+                { x: x - PLAYER_SIZE / 2, y: y + PLAYER_SIZE / 2 },
+                { x: x + PLAYER_SIZE / 2, y: y + PLAYER_SIZE / 2 }
+            ];
+            
+            for (const corner of corners) {
+                const mazeX = Math.floor(corner.x / CELL_SIZE);
+                const mazeY = Math.floor(corner.y / CELL_SIZE);
+                
+                // Check if out of bounds or hitting a wall
+                if (mazeX < 0 || mazeY < 0 || mazeX >= maze[0].length || mazeY >= maze.length || maze[mazeY][mazeX] === 1) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+        
+        function collectPowerUp(powerUp) {
+            powerUp.collected = true;
+            
+            // Apply power-up effect
+            if (powerUp.type === 'speed') {
+                player.hasSpeedBoost = true;
+                if (!activePowerups.includes('speed')) {
+                    activePowerups.push('speed');
+                }
+            } else if (powerUp.type === 'invincibility') {
+                player.isInvincible = true;
+                if (!activePowerups.includes('invincibility')) {
+                    activePowerups.push('invincibility');
+                }
+            }
+            
+            updatePowerupsDisplay();
+        }
+        
+        function updatePowerupsDisplay() {
+            if (activePowerups.length === 0) {
+                powerupsDisplay.textContent = 'None';
+            } else {
+                powerupsDisplay.textContent = activePowerups.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ');
+            }
+        }
+        
+        function render() {
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Calculate offset to center the maze
+            const mazeWidth = maze[0].length * CELL_SIZE;
+            const mazeHeight = maze.length * CELL_SIZE;
+            const offsetX = (canvas.width - mazeWidth) / 2;
+            const offsetY = (canvas.height - mazeHeight) / 2;
+            
+            // Draw maze
+            for (let y = 0; y < maze.length; y++) {
+                for (let x = 0; x < maze[y].length; x++) {
+                    if (maze[y][x] === 1) {
+                        ctx.fillStyle = '#2c3e50';
+                        ctx.fillRect(
+                            x * CELL_SIZE + offsetX, 
+                            y * CELL_SIZE + offsetY, 
+                            CELL_SIZE, 
+                            CELL_SIZE
+                        );
+                    } else {
+                        // Draw path
+                        ctx.fillStyle = '#3498db';
+                        ctx.fillRect(
+                            x * CELL_SIZE + offsetX, 
+                            y * CELL_SIZE + offsetY, 
+                            CELL_SIZE, 
+                            CELL_SIZE
+                        );
+                    }
+                }
+            }
+            
+            // Draw exit
+            ctx.fillStyle = '#2ecc71';
+            ctx.beginPath();
+            ctx.arc(
+                exit.x + offsetX, 
+                exit.y + offsetY, 
+                CELL_SIZE / 3, 
+                0, 
+                Math.PI * 2
+            );
+            ctx.fill();
+            
+            // Draw power-ups
+            for (const powerUp of powerUps) {
+                if (!powerUp.collected) {
+                    ctx.fillStyle = powerUp.type === 'speed' ? '#f1c40f' : '#9b59b6';
+                    ctx.beginPath();
+                    ctx.arc(
+                        powerUp.x + offsetX, 
+                        powerUp.y + offsetY, 
+                        POWERUP_SIZE / 2, 
+                        0, 
+                        Math.PI * 2
+                    );
+                    ctx.fill();
+                }
+            }
+            
+            // Draw enemies
+            for (const enemy of enemies) {
+                ctx.fillStyle = '#e74c3c';
+                ctx.beginPath();
+                ctx.arc(
+                    enemy.x + offsetX, 
+                    enemy.y + offsetY, 
+                    ENEMY_SIZE / 2, 
+                    0, 
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+            
+            // Draw player
+            ctx.fillStyle = player.isInvincible ? '#9b59b6' : (player.hasSpeedBoost ? '#f1c40f' : '#fff');
+            ctx.beginPath();
+            ctx.arc(
+                player.x + offsetX, 
+                player.y + offsetY, 
+                PLAYER_SIZE / 2, 
+                0, 
+                Math.PI * 2
+            );
+            ctx.fill();
+            
+            // Draw directional indicator (small triangle showing facing direction)
+            const facingX = player.x + offsetX + (keys.d ? 8 : (keys.a ? -8 : 0));
+            const facingY = player.y + offsetY + (keys.s ? 8 : (keys.w ? -8 : 0));
+            if (keys.w || keys.a || keys.s || keys.d) {
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(facingX, facingY, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        function handleKeyDown(e) {
+            if (e.key === 'w' || e.key === 'W') keys.w = true;
+            if (e.key === 'a' || e.key === 'A') keys.a = true;
+            if (e.key === 's' || e.key === 'S') keys.s = true;
+            if (e.key === 'd' || e.key === 'D') keys.d = true;
+        }
+        
+        function handleKeyUp(e) {
+            if (e.key === 'w' || e.key === 'W') keys.w = false;
+            if (e.key === 'a' || e.key === 'A') keys.a = false;
+            if (e.key === 's' || e.key === 'S') keys.s = false;
+            if (e.key === 'd' || e.key === 'D') keys.d = false;
+        }
+        
+        function levelComplete() {
+            gameRunning = false;
+            
+            if (currentLevel < maxLevel) {
+                levelCompleteModal.style.display = 'block';
+            } else {
+                // Game completed
+                levelCompleteModal.querySelector('h2').textContent = 'Game Complete!';
+                levelCompleteModal.querySelector('p').textContent = 'Congratulations! You\'ve completed all levels!';
+                levelCompleteModal.querySelector('button').textContent = 'Play Again';
+                levelCompleteModal.style.display = 'block';
+            }
+        }
+        
+        function gameOver() {
+            gameRunning = false;
+            gameOverModal.style.display = 'block';
+        }
+        
+        function startNextLevel() {
+            levelCompleteModal.style.display = 'none';
+            
+            if (currentLevel < maxLevel) {
+                currentLevel++;
+            } else {
+                currentLevel = 1;
+                activePowerups = [];
+            }
+            
+            initLevel(currentLevel);
+            gameRunning = true;
+            gameLoop();
+        }
+        
+        function restartGame() {
+            gameOverModal.style.display = 'none';
+            activePowerups = [];
+            initLevel(currentLevel);
+            gameRunning = true;
+            gameLoop();
+        }
+        
+        // Start the game
+        window.onload = init;
+    </script>
+</body>
+</html>
